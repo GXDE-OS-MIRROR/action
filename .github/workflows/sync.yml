@@ -50,7 +50,7 @@ jobs:
       - name: Install Packages
         run: |
           sudo apt update
-          sudo apt install rsync git -y
+          sudo apt install openssh-client rsync git -y
 
       - name: Clone Repository
         env: 
@@ -65,7 +65,9 @@ jobs:
           PASSWD: ${{ secrets.SYNCPASSWORD }}
           URL: ${{ secrets.SYNCURL }}
         run: |
-          sshpass -p "$PASSWD" rsync --exclude *.html --max-size=100m --progress -avpP --delete -e ssh $URL/gxde-os/${{ inputs.codeName }}/* $(basename ${{ inputs.repoUrl }})
+          mkdir -p ~/.ssh/
+          ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts
+          sshpass -p "$PASSWD" rsync --exclude *.html --max-size=100m --progress -avpP --delete -e ssh $URL/gxde-os/${{ inputs.codeName }}/ . #$(basename ${{ inputs.repoUrl }})
           # 创建页面
           cd $(basename ${{ inputs.repoUrl }})
           python3 ../action/build.py
