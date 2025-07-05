@@ -1,0 +1,86 @@
+name: Sync
+
+on:
+  workflow_call:
+    secrets:
+      SYNCPASSWORD:
+        required: true
+      SYNCURL:
+        required: true
+      GITPASSWD:
+        required: true
+      GITUSER:
+        required: true
+
+    inputs:
+      codeName:
+        type: string
+        description: 'GXDE OS Code Name'
+        required: true
+
+      repoUrl:
+        type: string
+        description: 'Github Repo URL (Not include https://github.com/)'
+        required: true
+
+
+
+env:
+  REPOSITORY: https://github.com/GXDE-OS/GXDE  
+  BOTTLEPATH: system-bottle
+
+jobs:  
+  build:
+    if: github.repository_owner == 'GXDE-OS-MIRROR'
+    runs-on: ubuntu-24.04
+    steps:
+      # 由于默认的 Ubuntu 环境只有 17G 左右的剩余空间，所以我们需要先利用如下 action 对编译环境进行扩容
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          # 这个值是保留给系统的空间大小，之前设置太小，总会在安装依赖或者编译过程中报设备空间不足的错误而导致编译失败
+          root-reserve-mb: 4096
+          swap-size-mb: 512
+          remove-dotnet: 'true'
+          remove-docker-images: 'true'
+          remove-codeql: 'true'
+          remove-haskell: 'true'
+          remove-android: 'true'
+
+      - name: Install Packages
+        run: |
+          sudo apt update
+          sudo apt install rsync git -y
+
+      - name: Clone Repository
+        env: 
+          PASSWD: ${{ secrets.GITPASSWD }}
+          USER: ${{ secrets.GITUSER }}
+        run: |
+          git clone --depth=1 "https://$USER:$PASSWD@github.com/${{ inputs.repoUrl }}" 
+          git clone --depth=1 "https://github.com/GXDE-OS-MIRROR/action"
+
+      - name: Sync
+        env: 
+          PASSWD: ${{ secrets.SYNCPASSWORD }}
+          URL: ${{ secrets.SYNCURL }}
+        run: |
+          sshpass -p "$PASSWD" rsync --exclude *.html --max-size=100m --progress -avpP --delete -e ssh $URL/gxde-os/${{ inputs.codeName }}/* $(basename ${{ inputs.repoUrl }})
+          # 创建页面
+          cd $(basename ${{ inputs.repoUrl }})
+          python3 ../action/build.py
+          cp -rv ../action/*.html . 
+          cp -rv ../action/icons .
+
+      - name: Push
+        env: 
+          USER: ${{ secrets.GITUSER }}
+        run: |
+          git config --global user.name "$USER"
+          git config --global user.email 3025613752@qq.com
+          cd $(basename ${{ inputs.repoUrl }})
+          git add .
+          git commit -m "Add Packages (`date`)"
+          git push
+          
+
